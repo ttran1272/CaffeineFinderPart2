@@ -8,7 +8,6 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -16,10 +15,8 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 
 import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.Api;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.common.api.Status;
+import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdate;
@@ -32,10 +29,7 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 //DONE: Implement the following interfaces:
 //DONE: GoogleApiClient.ConnectionCallbakcs, GoogleApiClient.OnConnectionFailedListener and LocationListener
@@ -43,7 +37,7 @@ public class CaffeineListActivity extends AppCompatActivity
         implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
-        LocationListenter {
+        LocationListener {
 
     public static final int COARSE_LOCATION_REQUEST_CODE = 100;
     private DBHelper db;
@@ -152,6 +146,7 @@ public class CaffeineListActivity extends AppCompatActivity
             Intent detailsIntent = new Intent(this, CaffeineDetailsActivity.class);
 
             detailsIntent.putExtra("SelectedLocation", selectedCaffeineLocation);
+            detailsIntent.putExtra("MyLocation", mLastLocation);
             startActivity(detailsIntent);
         }
     }
@@ -174,7 +169,23 @@ public class CaffeineListActivity extends AppCompatActivity
             return;
         }
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-        
+        handleNewLocation(mLastLocation);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
+            mLastLocation = new Location("");
+            mLastLocation.setLatitude(0.0);
+            mLastLocation.setLongitude(0.0);
+        }
+        else
+        {
+            mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+        }
+        handleNewLocation(mLastLocation);
     }
 
     @Override
@@ -184,7 +195,12 @@ public class CaffeineListActivity extends AppCompatActivity
 
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.e("Caffein Finder", "Connection to Location Services failed: " + connectionResult.getErrorMessage());;
+    }
 
+    @Override
+    public void onLocationChanged(Location location) {
+        handleNewLocation(location);
     }
 
     //TODO: In overriden onConnected method, get the last location, then request location updates and handle the new location
@@ -197,4 +213,32 @@ public class CaffeineListActivity extends AppCompatActivity
     //TODO: Create a new method: public void findClosestCaffeine, which will be invoked when a user clicks on the button
     //TODO: Loop through all the caffeine locations and find the one with the minimum distance.
     //TODO: Then, fire off an Intent to the details page and put both the SelectedLocation and MyLocation
+    public void findClosestCaffeine(View v)
+    {
+        double minDistance = Double.MAX_VALUE;
+        CaffeineLocation closestLocation = null;
+        double distance;
+        Location tempLocation = new Location("");
+
+        // Loop through the list of caffeine sources:
+        for (CaffeineLocation c : mAllCaffeineLocationsList)
+        {
+            // Convert our caffeince location into a (google) location
+            tempLocation.setLatitude(c.getLatitude());
+            tempLocation.setLongitude(c.getLongitude());
+            distance = tempLocation.distanceTo(mLastLocation);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                closestLocation = c;
+            }
+        }
+
+        // Let's fire off an Intent to the details page
+        Intent detailsIntent = new Intent(this, CaffeineDetailsActivity.class);
+        detailsIntent.putExtra("SelectedLocation", closestLocation);
+        detailsIntent.putExtra("MyLocation", mLastLocation);
+        startActivity(detailsIntent);
+
+    }
 }
